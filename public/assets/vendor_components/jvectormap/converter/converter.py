@@ -44,7 +44,7 @@ class Converter:
       'precision': 2,
       'insets': []
     }
-    args.update(config)
+    args |= config
 
     self.map = Map(args['name'], args.get('language'))
 
@@ -81,7 +81,8 @@ class Converter:
     self.simplify_tolerance = args.get('simplify_tolerance')
     self.for_each = args.get('for_each')
     self.emulate_longitude0 = args.get('emulate_longitude0')
-    if args.get('emulate_longitude0') is None and (self.projection == 'merc' or self.projection =='mill') and self.longitude0 != 0:
+    if (args.get('emulate_longitude0') is None
+        and self.projection in ['merc', 'mill'] and self.longitude0 != 0):
       self.emulate_longitude0 = True
 
     if args.get('viewport'):
@@ -91,16 +92,13 @@ class Converter:
 
     # spatial reference to convert to
     self.spatialRef = osr.SpatialReference()
-    projString = '+proj='+str(self.projection)+' +a=6381372 +b=6381372 +lat_0=0'
+    projString = f'+proj={str(self.projection)} +a=6381372 +b=6381372 +lat_0=0'
     if not self.emulate_longitude0:
-      projString += ' +lon_0='+str(self.longitude0)
+      projString += f' +lon_0={self.longitude0}'
     self.spatialRef.ImportFromProj4(projString)
 
     # handle map insets
-    if args.get('insets'):
-      self.insets = args.get('insets')
-    else:
-      self.insets = []
+    self.insets = args.get('insets') or []
 
   def loadData(self):
     for sourceConfig in self.sources:
@@ -219,10 +217,7 @@ class Converter:
         converter.convert(childConfig['output_file'])
 
   def renderMapInset(self, codes, left, top, width):
-    envelope = []
-    for code in codes:
-      envelope.append( self.features[code]['geometry'].envelope )
-
+    envelope = [self.features[code]['geometry'].envelope for code in codes]
     bbox = shapely.geometry.MultiPolygon( envelope ).bounds
 
     scale = (bbox[2]-bbox[0]) / width
@@ -243,18 +238,17 @@ class Converter:
         polygons = [geometry]
       path = ''
       for polygon in polygons:
-        rings = []
-        rings.append(polygon.exterior)
+        rings = [polygon.exterior]
         rings.extend(polygon.interiors)
         for ring in rings:
           for pointIndex in range( len(ring.coords) ):
             point = ring.coords[pointIndex]
             if pointIndex == 0:
-              path += 'M'+str( round( (point[0]-bbox[0]) / scale + left, self.precision) )
-              path += ','+str( round( (bbox[3] - point[1]) / scale + top, self.precision) )
+              path += f'M{str(round( (point[0]-bbox[0]) / scale + left, self.precision))}'
+              path += f',{str(round( (bbox[3] - point[1]) / scale + top, self.precision))}'
             else:
-              path += 'l' + str( round(point[0]/scale - ring.coords[pointIndex-1][0]/scale, self.precision) )
-              path += ',' + str( round(ring.coords[pointIndex-1][1]/scale - point[1]/scale, self.precision) )
+              path += f'l{str(round(point[0]/scale - ring.coords[pointIndex-1][0]/scale, self.precision))}'
+              path += f',{str(round(ring.coords[pointIndex-1][1]/scale - point[1]/scale, self.precision))}'
           path += 'Z'
       self.map.addPath(path, feature['code'], feature['name'])
     return bbox
